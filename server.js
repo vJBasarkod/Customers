@@ -94,7 +94,7 @@ app.delete("/customers/:id", async (req, res) => {
     if (message) {
         res.send(message);
     } else {
-       // res.status(404);
+       res.status(404);
         res.send(errMessage);
     }
 
