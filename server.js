@@ -2,7 +2,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const da = require("./data-access");
 const path = require('path'); 
-
+const checkApiKey = require("./security").checkApiKey;
+const getNewApiKey = require("./security").getNewApiKey;
 const app = express();
 const port = process.env.PORT || 4000;  // use env var or default to 4000
 
@@ -17,7 +18,18 @@ app.listen(port, () => {
   console.log("staticDir: " + staticDir);
 });
 
-app.get("/customers", async (req, res) => {
+app.get("/apikey", async (req, res) => {
+    let email = req.query.email;
+    if(email){
+        const newApiKey = getNewApiKey(email);
+        res.send(newApiKey);
+    }else{
+        res.status(400);
+        res.send("an email query param is required");
+    }   
+});
+
+app.get("/customers", checkApiKey, async (req, res) => {
     const [cust, err] = await da.getCustomers();
     if(cust){
         res.send(cust);
@@ -26,6 +38,33 @@ app.get("/customers", async (req, res) => {
         res.send(err);
     }   
 });
+
+app.get("/customers/find/", async (req, res) => {
+    let id = +req.query.id;
+    let email = req.query.email;
+    let password = req.query.password;
+    let query = null;
+    if (id > -1) {
+        query = { "id": id };
+    } else if (email) {
+        query = { "email": email };
+    } else if (password) {
+        query = { "password": password }
+    }
+    if (query) {
+        const [customers, err] = await da.findCustomers(query);
+        if (customers) {
+            res.send(customers);
+        } else {
+            res.status(404);
+            res.send(err);
+        }
+    } else {
+        res.status(400);
+        res.send("query string is required");
+    }
+});
+
 
 app.get("/customers/:id", async (req, res) => {
     const id = req.params.id;
@@ -37,6 +76,8 @@ app.get("/customers/:id", async (req, res) => {
         res.send(err);
     }   
 });
+
+
 
 app.get("/reset", async (req, res) => {
     const [result, err] = await da.resetCustomers();
@@ -94,9 +135,8 @@ app.delete("/customers/:id", async (req, res) => {
     if (message) {
         res.send(message);
     } else {
-       res.status(404);
+        res.status(404);
         res.send(errMessage);
     }
-
 });
 
