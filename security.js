@@ -1,3 +1,6 @@
+// Middleware to check the API Key
+require('dotenv').config(); // Load environment variables from .env file
+
 var crypto = require('crypto');
 
 let apiKey = null;
@@ -19,6 +22,9 @@ function displayApiKeys(){
 
 function setApiKey(){
   apiKey = process.env.API_KEY;
+  console.log("setApiKey");
+  console.log("argv " + process.argv);
+
   if(process.argv[2] != null){
       if(process.argv[2].indexOf('=') >= 0){
           apiKey = process.argv[2].substring(process.argv[2].indexOf('=')+1,process.argv[2].length );
@@ -33,29 +39,32 @@ function setApiKey(){
   }  
 }
 
+
 function checkApiKey(req, res, next) {
-    const apiKeyHeader = req.headers['x-api-key']||req.query.API_KEY  ; // Assuming the API key is sent in the header named 'x-api-key'
-  
-    // Check if API key is present
-    if (!apiKeyHeader) {
-      return res.status(401).json({ message: 'Unauthorized: Missing API key' });
+    const apiKeyInput = req.query.api_key || req.headers['x-api-key'];
+    // get the key from environment variable or hardcoded for simplicity
+    // In production, you should use environment variables for sensitive data
+    const apiKey = process.env.API_KEY;
+
+    if (!apiKeyInput){
+        res.status(401).json({ message: 'Unauthorized: Missing API key' });
+        return;
     }
-  
-    // Compare the received key with the stored key (from environment variable or configuration file)
+
     let keyValid = false;    
     for( let value of apiKeys.values()){
-      if (apiKeyHeader === value){
+      if (apiKeyInput === value){
         keyValid = true;
       }
     }
     if (!keyValid ) {
       return res.status(403).json({ message: 'Forbidden: Invalid API key' });
     }
-  
-    // If valid key, continue processing the request
+
+
     next();
-  }
-  
-  setApiKey();
-  
-  module.exports = {setApiKey, checkApiKey, getNewApiKey};
+};
+
+setApiKey();
+
+module.exports = { getNewApiKey, setApiKey, checkApiKey };
