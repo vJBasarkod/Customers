@@ -1,21 +1,21 @@
-const express = require('express');
+ const express = require('express');
+const path = require('path');
 const bodyParser = require('body-parser');
-const da = require("./data-access");
-const path = require('path'); 
-const checkApiKey = require("./security").checkApiKey;
-const getNewApiKey = require("./security").getNewApiKey;
 const app = express();
-const port = process.env.PORT || 4000;  // use env var or default to 4000
+require('dotenv').config(); // Load environment variables from .env file
+const port = process.env.PORT || 4000;
+
+const da = require("./data-access");
+const { checkApiKey } = require("./security");
+const getNewApiKey = require("./security").getNewApiKey;
 
 app.use(bodyParser.json());
 
-// Set the static directory to serve files from
-const staticDir = path.join(__dirname, 'public');
-app.use(express.static(staticDir));
+// Serve static files from the "public" directory
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
-  console.log("staticDir: " + staticDir);
 });
 
 app.get("/apikey", async (req, res) => {
@@ -30,56 +30,48 @@ app.get("/apikey", async (req, res) => {
 });
 
 app.get("/customers", checkApiKey, async (req, res) => {
-    const [cust, err] = await da.getCustomers();
-    if(cust){
-        res.send(cust);
-    }else{
-        res.status(500);
-        res.send(err);
-    }   
+     const [cust, err] = await da.getCustomers();
+     if(cust){
+         res.send(cust);
+     }else{
+         res.status(500);
+         res.send(err);
+     }   
 });
 
-app.get("/customers/find/", async (req, res) => {
-    let id = +req.query.id;
-    let email = req.query.email;
-    let password = req.query.password;
-    let query = null;
-    if (id > -1) {
-        query = { "id": id };
-    } else if (email) {
-        query = { "email": email };
-    } else if (password) {
-        query = { "password": password }
-    }
-    if (query) {
-        const [customers, err] = await da.findCustomers(query);
-        if (customers) {
-            res.send(customers);
-        } else {
-            res.status(404);
-            res.send(err);
-        }
-    } else {
+app.get("/customers/find", async (req, res) => {
+    const keys = Object.keys(req.query);
+    if (keys.length === 0) {
         res.status(400);
         res.send("query string is required");
+        return;
+    } 
+
+    if (keys.length > 1) {
+        res.status(400);
+        res.send("only one query string is allowed");
+        return;
+    }
+
+    const key = keys[0];
+    const validKeys = ["id", "name", "email"];
+    if (!validKeys.includes(key)) {
+        res.status(400);
+        res.send("query string must be one of " + validKeys.join(", "));
+        return;
+    }
+    
+    const value = req.query[key];
+    const [cust, err] = await da.findCustomer(key, value);
+    if (cust) {
+        res.send(cust);
+    } else {
+        res.status(404);
+        res.send(err);
     }
 });
 
-
-app.get("/customers/:id", async (req, res) => {
-    const id = req.params.id;
-    const [cust, err] = await da.getCustomerById(id);
-    if(cust){
-        res.send(cust);
-    }else{
-        res.status(404);
-        res.send(err);
-    }   
-});
-
-
-
-app.get("/reset", async (req, res) => {
+app.get("/reset", checkApiKey, async (req, res) => {
     const [result, err] = await da.resetCustomers();
     if(result){
         res.send(result);
@@ -89,12 +81,29 @@ app.get("/reset", async (req, res) => {
     }   
 });
 
-app.post('/customers', async (req, res) => {
+app.post('/customers', checkApiKey, async (req, res) => {
     const newCustomer = req.body;
-    if (newCustomer === null) {
+    if (newCustomer === null || req.body == {}) {
         res.status(400);
         res.send("missing request body");
     } else {
+
+        const key = "email";
+        const value = newCustomer.email;
+
+        const [cust, err] = await da.findCustomer(key, value);
+        if (cust) {
+            res.status(400);
+            res.send("email already used");
+            return;
+        }
+        
+        if (err && err !== "no matching customer documents found") {
+            res.status(500);
+            res.send(err);
+            return;
+        }
+        
         // return array format [status, id, errMessage]
         const [status, id, errMessage] = await da.addCustomer(newCustomer);
         if (status === "success") {
@@ -109,13 +118,64 @@ app.post('/customers', async (req, res) => {
     }
 });
 
-app.put('/customers/:id', async (req, res) => {
+app.get("/customers/:id", checkApiKey, async (req, res) => {
+     const id = req.params.id;
+     // return array [customer, errMessage]
+     const [cust, err] = await da.getCustomerById(id);
+     if(cust){
+         res.send(cust);
+     }else{
+         res.status(404);
+         res.send(err);
+     }   
+});
+
+app.put('/customers/:id', checkApiKey, async (req, res) => {
     const id = req.params.id;
     const updatedCustomer = req.body;
-    if (updatedCustomer === null) {
+
+    
+    if (updatedCustomer === null || req.body == {}) {
         res.status(400);
         res.send("missing request body");
     } else {
+        const updatedCustomerObject = JSON.parse(JSON.stringify(updatedCustomer));
+        console.log("updatedCustomerObject: " + JSON.stringify(updatedCustomerObject));
+        console.log("updatedCustomerObject.id: " + updatedCustomerObject.id);
+        if (id != updatedCustomerObject.id) {
+            res.status(400);
+            res.send("id in path and body do not match");
+            return;
+        }
+
+        const key = "email";
+        const value = updatedCustomer.email;
+
+        const [cust, err] = await da.findCustomer(key, value);
+    
+        //console.log ("cust unstring : " + cust);
+        //console.log("cust: " + JSON.stringify(cust));
+        //console.log("cust.id: " + custObject.id);
+        //console.log("custObject : " + JSON.stringify(custObject));
+        //console.log("cust.id: " + cust.id);
+        //console.log("id: " + id);
+
+        if (cust){
+            const custObject = JSON.parse(JSON.stringify(cust[0]));
+            if (custObject && custObject.id != id) {
+                res.status(400);
+                res.send("email already used - test");
+                return;
+            }
+        }
+
+        
+        if (err && err !== "no matching customer documents found") {
+            res.status(500);
+            res.send(err);
+            return;
+        }
+
         delete updatedCustomer._id;
         // return array format [message, errMessage]
         const [message, errMessage] = await da.updateCustomer(updatedCustomer);
@@ -128,7 +188,7 @@ app.put('/customers/:id', async (req, res) => {
     }
 });
 
-app.delete("/customers/:id", async (req, res) => {
+app.delete("/customers/:id", checkApiKey, async (req, res) => {
     const id = req.params.id;
     // return array [message, errMessage]
     const [message, errMessage] = await da.deleteCustomerById(id);
@@ -139,4 +199,3 @@ app.delete("/customers/:id", async (req, res) => {
         res.send(errMessage);
     }
 });
-
