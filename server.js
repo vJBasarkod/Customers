@@ -2,11 +2,11 @@
 const path = require('path');
 const bodyParser = require('body-parser');
 const app = express();
-require('dotenv').config(); // Load environment variables from .env file
+//require('dotenv').config(); // Load environment variables from .env file
 const port = process.env.PORT || 4000;
 
 const da = require("./data-access");
-const { checkApiKey } = require("./security");
+const checkApiKey = require("./security").checkApiKey;
 const getNewApiKey = require("./security").getNewApiKey;
 
 app.use(bodyParser.json());
