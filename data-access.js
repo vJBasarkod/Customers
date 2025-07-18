@@ -22,6 +22,22 @@ async function getCustomers() {
     }
 }
 
+
+async function getCustomerByEmail(email) {
+    try {
+        const customer = await collection.findOne({"email": email});
+        // return array [customer, errMessage]
+        if(!customer){
+          return [null, "email not used"];
+        }
+        return [customer, null];
+    } catch (err) {
+        console.log(err.message);
+        return [null, err.message];
+    }
+}   
+
+
 async function getCustomerById(id) {
     try {
         const customer = await collection.findOne({"id": +id});
