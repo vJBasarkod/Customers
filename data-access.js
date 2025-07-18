@@ -36,6 +36,42 @@ async function getCustomerById(id) {
     }
 }
 
+async function getCustomerByEmail(email) {
+    try {
+        const customer = await collection.findOne({"email": email});
+        // return array [customer, errMessage]
+        if(!customer){
+          return [null, "email not used"];
+        }
+        return [customer, null];
+    } catch (err) {
+        console.log(err.message);
+        return [null, err.message];
+    }
+}   
+
+async function findCustomer(key, value) {
+    try {
+        if (key === "id") {
+            value = +value; // convert to number
+        }
+        if (value === undefined || value === null) {
+            return [null, "value for query string is missing"];
+        }
+        const query = {[key]: value};
+
+        const customers = await collection.find(query).toArray();
+        // return array [customer, errMessage]
+        if (customers.length === 0) {
+            return [null, "no matching customer documents found"];
+        }
+        return [customers, null];
+    } catch (err) {
+        console.log(err.message);
+        return [null, err.message];
+    }
+}
+
 async function addCustomer(newCustomer) {
     try {
         const insertResult = await collection.insertOne(newCustomer);
